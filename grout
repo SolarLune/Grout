@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+
+import sys, time
+import subprocess
+
+from config import *
+
+# Space represents the entire "workspace", and includes all the monitors available.
+class Space():
+
+	screens = []
+	width = 0
+	height = 0
+
+	def __init__(self):
+		self.identifyScreens()
+
+	def identifyScreens(self):
+
+		out = subprocess.getoutput("xrandr")
+
+		lines = out.splitlines()
+		screenIndex = 0
+
+		for line in lines:
+
+			parameters = line.split(" ")
+			if parameters[1] == "connected":
+				primary = parameters[2] == "primary"
+				if primary:
+					parameters = parameters[:2] + parameters[3:]
+
+				sizeAndPos = parameters[2].split("+")
+				size = sizeAndPos[0].split("x")
+				newScreen = Screen(int(sizeAndPos[1]), int(sizeAndPos[2]), int(size[0]), int(size[1]), primary)
+
+				self.screens.append(newScreen)
+
+		self.screens.sort(key=lambda screen: screen.x, reverse=False) # Sort the screens by X position
+
+		for i, screen in enumerate(self.screens):
+			screen.index = i
+			if screen.x + screen.w > self.width:
+				self.width = screen.x + screen.w
+			if screen.y + screen.h > self.height:
+				self.height = screen.y + screen.h
+
+	def getPrimaryScreen(self):
+		for scr in self.screens:
+			if scr.primary:
+				return scr
+
+	def print(self):
+		print("Screens:")
+		for screen in self.screens:
+			print(screen)
+		print("Overall size: {x}, {y}".format(x=self.width, y=self.height))
+
+	def getScreenFromXY(self, x, y):
+		for scr in self.screens:
+			if x >= scr.x and x <= scr.x + scr.w and y >= scr.y and y <= scr.y + scr.h:
+				return scr
+		return None
+
+# Screen represents each individual screen reported by xrandr.
+class Screen():
+
+	index = 0
+	primary = False
+	x = 0
+	y = 0
+	w = 0
+	h = 0
+
+	def __init__(self, x, y, w, h, primary=False):
+		self.x = x
+		self.y = y
+		self.w = w
+		self.h = h
+		self.primary = primary
+
+	def __str__(self):
+		return "[Index: {index}, Rect: [{x}, {y}, {w}, {h}], primary:{primary}]".format(index=self.index, x=self.x, y=self.y, w=self.w, h=self.h, primary=self.primary)
+
+	# Sets the active window to a target size on screen.
+	def setCurrentWindow(self, tileCoords):
+
+		cx = (self.x + (tileCoords[0] * self.w)) + margin
+		cy = (self.y + (tileCoords[1] * self.h)) + margin
+		cw = (tileCoords[2] * self.w) - (margin * 2)
+		ch = (tileCoords[3] * self.h) - (margin * 2)
+
+		if fillExtents:
+			
+			extents = [0, 0, 0, 0]
+
+			winData = subprocess.getoutput("xprop -id {id}".format(id=targetWindow))
+			for line in winData.splitlines():
+				if "FRAME_EXTENTS" in line:
+					values = line.split(" ")[-4:]
+					for i, v in enumerate(values):
+						values[i] = int(v.replace(",", ""))
+					extents = values
+
+			cx -= extents[0]
+			cw += extents[1] + extents[0]
+
+			cy -= extents[3]
+
+			# EXTREMELY HACKY, but I can't find a way to properly fix this.
+			# Essentially, for some windows, they have a border at the top only
+			# (which is the title bar); in this case, they need to be offset
+			# by just that amount. For GTK apps, they are INSET by an amount,
+			# including the titlebar, and that amount needs to be added to the
+			# width and height to have them occupy the full space they are supposed 
+			# to for the tile.
+			if extents[3] == 0:
+				ch -= extents[2]
+			else:
+				ch += extents[3] + extents[2]
+
+		subprocess.call(["xdotool", "getactivewindow", "windowsize", str(cw), str(ch)])
+		time.sleep(0.1)
+		subprocess.call(["xdotool", "getactivewindow", "windowmove", str(cx), str(cy)])
+
+	# Gets the tile coordinates given the index (i.e. an index of 2 will return the extents of the cells that contain "2" in the layout, forming the tile),
+	# in percentages of the screen size. Given a call of getTileCoordinates(0) on a layout of:
+	# [ 
+	#     [1, 0, 1, 1],
+	#     [1, 0, 1, 1],
+	#     [1, 1, 1, 1],
+	# ]
+	# The function should return [0.25, 0, 0.25, 0.66], or [1/4, 0, 1/4, 2/3].
+	# If you give it a tile that doesn't exist, it will return the first value it finds.
+	def getTileCoordinates(self, tileIndex):
+
+		x = -1
+		y = -1
+		w = 0
+		h = 0
+
+		if len(currentLayout) > self.index:
+			layout = layoutLibrary[currentLayout[self.index]]
+		else:
+			layout = layoutLibrary[currentLayout[0]]
+
+		for cy, row in enumerate(layout):
+			for cx, cell in enumerate(row):
+				if cell == tileIndex:
+					if x < 0:
+						x = cx
+						w = 1
+					if cx >= x + w:
+						w = cx+1 - x
+
+					if y < 0:
+						y = cy
+						h = 1
+					if cy+1 > y + h:
+						h = cy+1 - y
+
+		# Just align somewhere if you're trying to put a window in the 8th tile in a 3 tile layout.
+		if x < 0 and y < 0:
+			return self.getTileCoordinates(layout[0][0])
+
+		x *= 1.0 / len(layout[0])
+		y *= 1.0 / len(layout)
+		w *= 1.0 / len(layout[0])
+		h *= 1.0 / len(layout)
+		
+		return x, y, w, h	
+
+# Returns the mouse position.
+def getMousePosition():
+
+	mouseInfo = subprocess.getoutput("xdotool getmouselocation") 
+	mouseInfo = mouseInfo.split(" ")
+	
+	mouseX = 0
+	mouseY = 0
+	
+	for info in mouseInfo:
+		if "x" in info:
+			mouseX = int(info.split(":")[1])
+		if "y" in info:
+			mouseY = int(info.split(":")[1])
+
+	return mouseX, mouseY
+
+targetWindow = subprocess.getoutput("xdotool getactivewindow")
+
+space = Space()
+
+if len(sys.argv) == 1 or not sys.argv[1].isdigit():
+	print("GTile: A manual tiling script.")
+	print("------")
+	print("Customize the configuration section in this script.")
+	print("Then, pass a number used in the layout into the script")
+	print("to snap the currently active window to that size and position.")
+	print("Note that this script won't work on maximized windows.")
+else:
+	
+	tileIndex = int(sys.argv[1])
+	scr = space.screens[0]
+
+	if targetScreen == "mouse":
+		pos = getMousePosition()
+		scr = space.getScreenFromXY(pos[0], pos[1])
+
+	elif targetScreen == "primary":
+		scr = space.getPrimaryScreen()
+
+	elif targetScreen == "auto":
+		targetWindowPosition = subprocess.getoutput("xdotool getwindowgeometry {i}".format(i=targetWindow))
+		pos = [0, 0]
+		for line in targetWindowPosition.splitlines():
+			if "Position" in line:
+				p = line.split(" ")[3].split(",")
+				pos = [int(p[0]), int(p[1])]
+			if "Geometry" in line:	# We want to get the center to help prevent mistakes where windows are offset and aren't seen as being on monitors
+				geometry = line.split(" ")[3].split("x")
+				geometry[0] = int(geometry[0])
+				geometry[1] = int(geometry[1])
+				pos[0] += geometry[0] / 2
+				pos[1] += geometry[1] / 2
+
+		scr = space.getScreenFromXY(int(pos[0]), int(pos[1]))
+	# elif isinstance(targetScreen, int):
+	# 	scr = space.screens[targetScreen]
+	
+	scr.setCurrentWindow(scr.getTileCoordinates(tileIndex))
