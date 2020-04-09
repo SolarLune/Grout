@@ -4,8 +4,15 @@
 # "auto": Apply the tiling to the screen the window is already on.
 targetScreen = "mouse"
 
-# margin indicates the distance in pixels to leave around the border of the tile 
-# and the program edges.
+# The border variables indicate how much of each edge of each screen tiling should avoid (in pixels).
+# This is useful for panels or other objects that prevent window placement.
+leftBorder = 0
+rightBorder = 0
+topBorder = 0
+bottomBorder = 0
+
+# margin indicates the distance in pixels to leave around the border of each tile 
+# and the program's edges.
 margin = 8
 
 # fillExtents indicates whether windows should fill their tiles completely, or leave 
@@ -24,7 +31,7 @@ fillExtents = True
 # ]
 
 currentLayout = [
-	"squares",
+	"major minor",
 ]
 
 # The layout library; you can make a new layout by just adding one below.
@@ -35,6 +42,36 @@ layoutLibrary = {
 	"major minor": [
 		[1, 2],
 		[1, 3],
+	],
+
+	"halfH":[
+		[1, 2],
+	],
+
+	"halfV":[
+		[1],
+		[2],
+	],
+	
+	"thirdsH":[
+		[1, 2, 3],
+	],
+
+	"thirdsV":[
+		[1],
+		[2],
+		[3],
+	],
+
+	"fourthsH":[
+		[1, 2, 3, 4],
+	],
+
+	"fourthsV":[
+		[1],
+		[2],
+		[3],
+		[4],
 	],
 
 	"centeredV":[
@@ -62,45 +99,32 @@ layoutLibrary = {
 		[4, 3, 3],
 	],
 
-	"thirdsH":[
-		[1, 2, 3],
-	],
-
-	"thirdsV":[
-		[1],
-		[2],
-		[3],
-	],
-
-	"halfH":[
-		[1, 2],
-	],
-
-	"halfV":[
-		[1],
-		[2],
-	],
-
-	"fourthsH":[
-		[1, 2, 3, 4],
-	],
-
-	"fourthsV":[
-		[1],
-		[2],
-		[3],
-		[4],
-	],
-
 	"grid2x2":[
 		[1, 2],
 		[4, 3],
 	],
 
 	"columns":[
+		[1, 2],
+		[1, 3],
+		[1, 4],
+	],
+
+	"columns 2":[
 		[1, 2, 3],
 		[1, 2, 4],
 		[1, 2, 5],
+	],
+
+	"rows": [
+		[1, 1, 1],
+		[2, 3, 4]
+	],
+
+	"rows 2": [
+		[1, 1, 1],
+		[2, 2, 2],
+		[3, 4, 5],
 	],
 
 	"full": [

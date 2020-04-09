@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 
-import sys, time
+import sys, time, os, shutil
 import subprocess
 
 from config import *
+
+# Backup the config file on "first run"
+baseDir = os.path.dirname(os.path.realpath(__file__))
+if not os.path.exists(os.path.join(baseDir, "config_backup.py")):
+	shutil.copyfile(os.path.join(baseDir, "config.py"), os.path.join(baseDir, "config_backup.py"))
 
 # Space represents the entire "workspace", and includes all the monitors available.
 class Space():
@@ -118,6 +123,20 @@ class Screen():
 				ch -= extents[2]
 			else:
 				ch += extents[3] + extents[2]
+
+		if tileCoords[0] == 0:
+			cx += leftBorder
+			cw -= leftBorder
+
+		if tileCoords[1] == 0:
+			cy += topBorder
+			ch -= topBorder + margin
+
+		if tileCoords[0] + tileCoords[2] >= 0.99:
+			cw -= rightBorder
+
+		if tileCoords[1] + tileCoords[3] >= 0.99:
+			ch -= bottomBorder
 
 		subprocess.call(["xdotool", "getactivewindow", "windowsize", str(cw), str(ch)])
 		time.sleep(0.1)
